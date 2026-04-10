@@ -105,6 +105,15 @@ func (s *Session) SetProvider(p provider.Provider) {
 	s.provider = p
 }
 
+// SetModel updates the model name sent on future requests. This must be
+// called alongside SetProvider when switching between providers, otherwise
+// the old model name will be sent to the new provider.
+func (s *Session) SetModel(model string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.opts.Model = model
+}
+
 // SetSystemPrompt sets or updates the system prompt. It is stored as the first
 // message with role "system".
 func (s *Session) SetSystemPrompt(prompt string) {
