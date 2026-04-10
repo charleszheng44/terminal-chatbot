@@ -353,6 +353,7 @@ func (m *Model) handleModelSwitch(modelSpec string) (tea.Model, tea.Cmd) {
 	}
 
 	m.session.SetProvider(p)
+	m.session.SetModel(modelName)
 	m.modelName = provName + "/" + modelName
 	m.appState.ModelName = m.modelName
 	m.addSystemMessage(fmt.Sprintf("Switched to %s", m.modelName))
