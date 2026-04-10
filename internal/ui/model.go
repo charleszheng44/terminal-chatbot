@@ -505,7 +505,7 @@ func (m *Model) viewportWidth() int {
 // recalcLayout recalculates viewport and input dimensions after a resize.
 func (m *Model) recalcLayout() {
 	statusBarHeight := 1
-	inputHeight := m.input.textarea.Height() + 1 // +1 for border/padding
+	inputHeight := m.input.textarea.Height() + 2 // +2 for top and bottom border rules
 	vpHeight := m.height - statusBarHeight - inputHeight
 	if vpHeight < 1 {
 		vpHeight = 1

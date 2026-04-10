@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // SubmitMsg is sent when the user presses Enter to submit input.
@@ -21,17 +22,25 @@ type InputModel struct {
 	history      []string
 	historyIndex int
 	ctrlXPressed bool
+	width        int
 }
 
 // NewInputModel creates a new InputModel with sensible defaults.
 func NewInputModel() InputModel {
 	ta := textarea.New()
-	ta.Placeholder = "Type a message... (/help for commands)"
-	ta.Prompt = inputPromptStyle.Render("> ")
+	ta.Prompt = inputPromptStyle.Render("❯ ")
 	ta.CharLimit = 0 // unlimited
 	ta.MaxHeight = maxInputHeight
 	ta.ShowLineNumbers = false
 	ta.SetHeight(1)
+
+	// The bubbles textarea defaults give CursorLine a background color, which
+	// renders as a grey band on the cursor's line. Clear it on both focused
+	// and blurred states so the input has no background tint.
+	noBg := lipgloss.NewStyle()
+	ta.FocusedStyle.CursorLine = noBg
+	ta.BlurredStyle.CursorLine = noBg
+
 	ta.Focus()
 
 	// Remove default keybindings for Enter so we can handle it ourselves.
@@ -120,9 +129,16 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 	return m, cmd
 }
 
-// View renders the input component.
+// View renders the input component, wrapped in the input box frame
+// (horizontal rules above and below).
 func (m InputModel) View() string {
-	return m.textarea.View()
+	ta := m.textarea.View()
+	if m.width <= 0 {
+		// Before the first WindowSizeMsg we don't know the terminal width;
+		// fall back to the bare textarea so we don't render a stubby border.
+		return ta
+	}
+	return inputBoxStyle.Width(m.width).Render(ta)
 }
 
 // Value returns the current input text.
@@ -142,8 +158,10 @@ func (m *InputModel) SetValue(s string) {
 	m.resizeHeight()
 }
 
-// SetWidth sets the input width.
+// SetWidth sets the input width. The textarea itself uses the full width
+// (no side borders), so it receives the same value as the outer box.
 func (m *InputModel) SetWidth(w int) {
+	m.width = w
 	m.textarea.SetWidth(w)
 }
 
