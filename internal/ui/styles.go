@@ -24,10 +24,16 @@ var (
 			Italic(true).
 			Foreground(lipgloss.Color("245"))
 
-	// inputPromptStyle renders the "> " prompt indicator.
+	// inputPromptStyle renders the "❯ " prompt indicator.
 	inputPromptStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("69")).
 				Bold(true)
+
+	// inputBoxStyle frames the input area with horizontal rules above and
+	// below (no side borders), matching Claude Code's input look.
+	inputBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), true, false, true, false).
+			BorderForeground(lipgloss.Color("240"))
 
 	// errorStyle renders error text in bold red.
 	errorStyle = lipgloss.NewStyle().
