@@ -143,6 +143,7 @@ func New(cfg *config.Config) (*Model, error) {
 		Config:          &configAdapter{cfg: cfg},
 		ModelName:       displayName,
 		AvailableModels: availableModels,
+		Registry:        registry,
 		Quit: func() {
 			if m.program != nil {
 				m.program.Send(tea.Quit())

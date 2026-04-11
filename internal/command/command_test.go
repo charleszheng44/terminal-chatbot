@@ -99,7 +99,11 @@ func TestRegisterAll_IncludesExpectedCommands(t *testing.T) {
 }
 
 func TestHandleHelp_ListsAllCommands(t *testing.T) {
-	out, err := handleHelp(nil, "")
+	reg := NewRegistry()
+	RegisterAll(reg)
+	app := &AppState{Registry: reg}
+
+	out, err := handleHelp(app, "")
 	if err != nil {
 		t.Fatalf("handleHelp err: %v", err)
 	}
@@ -110,5 +114,42 @@ func TestHandleHelp_ListsAllCommands(t *testing.T) {
 		if !strings.Contains(out, "/"+name) {
 			t.Errorf("handleHelp output missing command %q:\n%s", name, out)
 		}
+	}
+}
+
+func TestHandleHelp_ReflectsRegistryContents(t *testing.T) {
+	// handleHelp must read from the live registry — injected commands
+	// should appear, and un-registered built-ins should not.
+	reg := NewRegistry()
+	reg.Register(Command{Name: "custom", Description: "a test-injected command"})
+	app := &AppState{Registry: reg}
+
+	out, err := handleHelp(app, "")
+	if err != nil {
+		t.Fatalf("handleHelp err: %v", err)
+	}
+	if !strings.Contains(out, "/custom") {
+		t.Errorf("handleHelp did not list injected command:\n%s", out)
+	}
+	if strings.Contains(out, "/model") {
+		t.Errorf("handleHelp leaked a built-in command not in the registry:\n%s", out)
+	}
+}
+
+func TestHandleHelp_NilRegistryFallback(t *testing.T) {
+	out, err := handleHelp(nil, "")
+	if err != nil {
+		t.Fatalf("handleHelp(nil) err: %v", err)
+	}
+	if out != "no commands registered" {
+		t.Errorf("handleHelp(nil) = %q, want %q", out, "no commands registered")
+	}
+
+	out, err = handleHelp(&AppState{}, "")
+	if err != nil {
+		t.Fatalf("handleHelp(empty) err: %v", err)
+	}
+	if out != "no commands registered" {
+		t.Errorf("handleHelp(empty) = %q, want %q", out, "no commands registered")
 	}
 }
