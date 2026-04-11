@@ -20,10 +20,10 @@ type Defaults struct {
 
 // Config is the top-level configuration for tchat.
 type Config struct {
-	DefaultModel string                       `yaml:"default_model"`
-	Defaults     Defaults                     `yaml:"defaults"`
+	DefaultModel string                             `yaml:"default_model"`
+	Defaults     Defaults                           `yaml:"defaults"`
 	Providers    map[string]provider.ProviderConfig `yaml:"providers"`
-	Aliases      map[string]string            `yaml:"aliases"`
+	Aliases      map[string]string                  `yaml:"aliases"`
 }
 
 // ConfigPath returns the path to the config file (~/.config/tchat/config.yaml).

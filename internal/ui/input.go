@@ -91,7 +91,7 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 		case "shift+enter":
 			// Insert a newline character.
 			m.textarea, cmd = m.textarea.Update(tea.KeyMsg{
-				Type: tea.KeyRunes,
+				Type:  tea.KeyRunes,
 				Runes: []rune{'\n'},
 			})
 			m.resizeHeight()
