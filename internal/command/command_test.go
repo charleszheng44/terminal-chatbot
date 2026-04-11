@@ -7,11 +7,11 @@ import (
 
 func TestParse(t *testing.T) {
 	cases := []struct {
-		name       string
-		input      string
-		wantName   string
-		wantArgs   string
-		wantIsCmd  bool
+		name      string
+		input     string
+		wantName  string
+		wantArgs  string
+		wantIsCmd bool
 	}{
 		{"simple command", "/help", "help", "", true},
 		{"command with args", "/model claude-sonnet", "model", "claude-sonnet", true},

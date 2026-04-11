@@ -12,10 +12,10 @@ import (
 // testProvider is a fake provider.Provider used to drive Session tests
 // without touching the network.
 type testProvider struct {
-	tokens     []string    // tokens streamed by StreamChat
-	chatReply  string      // reply returned by Chat
-	streamErr  error       // error returned from StreamChat
-	chatErr    error       // error returned from Chat
+	tokens     []string // tokens streamed by StreamChat
+	chatReply  string   // reply returned by Chat
+	streamErr  error    // error returned from StreamChat
+	chatErr    error    // error returned from Chat
 	lastMsgs   []provider.Message
 	lastOpts   provider.ChatOptions
 	streamCall int
