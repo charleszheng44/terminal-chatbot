@@ -457,12 +457,12 @@ func (m *Model) handleEditorRequest() (tea.Model, tea.Cmd) {
 	}
 
 	if _, err := tmpFile.WriteString(currentText); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 		m.err = fmt.Errorf("write temp file: %w", err)
 		return m, nil
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	tmpPath := tmpFile.Name()
 	editor := os.Getenv("EDITOR")
@@ -472,7 +472,7 @@ func (m *Model) handleEditorRequest() (tea.Model, tea.Cmd) {
 
 	c := exec.Command(editor, tmpPath)
 	return m, tea.ExecProcess(c, func(err error) tea.Msg {
-		defer os.Remove(tmpPath)
+		defer func() { _ = os.Remove(tmpPath) }()
 		if err != nil {
 			return StreamErrorMsg{Err: fmt.Errorf("editor: %w", err)}
 		}

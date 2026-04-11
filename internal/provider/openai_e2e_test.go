@@ -39,11 +39,11 @@ func newOpenAIStreamServer(t *testing.T, tokens []string) *httptest.Server {
 				`{"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":%q},"finish_reason":null}]}`,
 				tok,
 			)
-			fmt.Fprintf(w, "data: %s\n\n", chunk)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", chunk)
 			flusher.Flush()
 		}
 		// Final done marker.
-		fmt.Fprint(w, "data: [DONE]\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 		flusher.Flush()
 	})
 	srv := httptest.NewServer(h)
@@ -89,7 +89,7 @@ func TestOpenAI_Chat_E2E(t *testing.T) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		// Minimal ChatCompletion response body expected by the go-openai SDK.
-		fmt.Fprint(w, `{
+		_, _ = fmt.Fprint(w, `{
 			"id":"c2",
 			"object":"chat.completion",
 			"created":1,

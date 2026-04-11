@@ -102,7 +102,7 @@ func handleHelp(app *AppState, _ string) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("Available commands:\n")
 	for _, cmd := range cmds {
-		sb.WriteString(fmt.Sprintf("  /%-10s %s\n", cmd.Name, cmd.Description))
+		fmt.Fprintf(&sb, "  /%-10s %s\n", cmd.Name, cmd.Description)
 	}
 	return sb.String(), nil
 }
@@ -113,9 +113,9 @@ func handleModel(app *AppState, args string) (string, error) {
 			return fmt.Sprintf("Current model: %s\nNo other models configured.", app.ModelName), nil
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:\n", app.ModelName))
+		fmt.Fprintf(&sb, "Current model: %s\n\nAvailable models:\n", app.ModelName)
 		for _, m := range app.AvailableModels {
-			sb.WriteString(fmt.Sprintf("  - %s\n", m))
+			fmt.Fprintf(&sb, "  - %s\n", m)
 		}
 		return sb.String(), nil
 	}
@@ -149,7 +149,7 @@ func handleHistory(app *AppState, _ string) (string, error) {
 
 	var sb strings.Builder
 	for _, msg := range msgs {
-		sb.WriteString(fmt.Sprintf("[%s]\n%s\n\n", msg.Role, msg.Content))
+		fmt.Fprintf(&sb, "[%s]\n%s\n\n", msg.Role, msg.Content)
 	}
 	return sb.String(), nil
 }
@@ -182,7 +182,7 @@ func handleSave(app *AppState, args string) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("# tchat conversation\n\n")
 	for _, msg := range msgs {
-		sb.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", msg.Role, msg.Content))
+		fmt.Fprintf(&sb, "## %s\n\n%s\n\n", msg.Role, msg.Content)
 	}
 
 	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {

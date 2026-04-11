@@ -68,7 +68,7 @@ func (p *anthropicProvider) StreamChat(ctx context.Context, messages []Message, 
 	params := p.buildParams(messages, opts)
 
 	stream := p.client.Messages.NewStreaming(ctx, params)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	for stream.Next() {
 		event := stream.Current()

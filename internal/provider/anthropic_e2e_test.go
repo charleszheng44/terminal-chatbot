@@ -32,7 +32,7 @@ func newAnthropicStreamServer(t *testing.T, tokens []string) *httptest.Server {
 		w.WriteHeader(http.StatusOK)
 
 		writeEvent := func(event, data string) {
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
 			flusher.Flush()
 		}
 
@@ -94,7 +94,7 @@ func TestAnthropic_Chat_E2E(t *testing.T) {
 		}
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
+		_, _ = fmt.Fprint(w, `{
 			"id":"msg_2",
 			"type":"message",
 			"role":"assistant",

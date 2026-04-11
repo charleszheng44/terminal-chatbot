@@ -84,7 +84,7 @@ func (p *geminiProvider) StreamChat(ctx context.Context, messages []Message, opt
 	if err != nil {
 		return fmt.Errorf("creating Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(opts.Model)
 	nonSystemMessages, err := p.configureModel(model, messages, opts)
@@ -127,7 +127,7 @@ func (p *geminiProvider) Chat(ctx context.Context, messages []Message, opts Chat
 	if err != nil {
 		return "", fmt.Errorf("creating Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(opts.Model)
 	nonSystemMessages, err := p.configureModel(model, messages, opts)
@@ -145,7 +145,7 @@ func (p *geminiProvider) Chat(ctx context.Context, messages []Message, opts Chat
 
 	resp, err := cs.SendMessage(ctx, lastParts...)
 	if err != nil {
-		return "", fmt.Errorf("Gemini chat: %w", err)
+		return "", fmt.Errorf("gemini chat: %w", err)
 	}
 
 	var sb strings.Builder
