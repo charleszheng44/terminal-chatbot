@@ -27,6 +27,10 @@ type AppState struct {
 	Quit      func()
 	// AvailableModels is a list of model names that can be selected.
 	AvailableModels []string
+	// Registry is the active command registry. Handlers that need to
+	// enumerate commands (e.g. /help) read from this instead of
+	// rebuilding a registry inline.
+	Registry *Registry
 }
 
 // RegisterAll registers all built-in slash commands on the given registry.
@@ -94,10 +98,10 @@ func RegisterAll(registry *Registry) {
 }
 
 func handleHelp(app *AppState, _ string) (string, error) {
-	// We need access to the registry to list commands. Build it inline.
-	reg := NewRegistry()
-	RegisterAll(reg)
-	cmds := reg.All()
+	if app == nil || app.Registry == nil {
+		return "no commands registered", nil
+	}
+	cmds := app.Registry.All()
 
 	var sb strings.Builder
 	sb.WriteString("Available commands:\n")

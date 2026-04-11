@@ -99,7 +99,11 @@ func TestRegisterAll_IncludesExpectedCommands(t *testing.T) {
 }
 
 func TestHandleHelp_ListsAllCommands(t *testing.T) {
-	out, err := handleHelp(nil, "")
+	reg := NewRegistry()
+	RegisterAll(reg)
+	app := &AppState{Registry: reg}
+
+	out, err := handleHelp(app, "")
 	if err != nil {
 		t.Fatalf("handleHelp err: %v", err)
 	}
@@ -110,5 +114,50 @@ func TestHandleHelp_ListsAllCommands(t *testing.T) {
 		if !strings.Contains(out, "/"+name) {
 			t.Errorf("handleHelp output missing command %q:\n%s", name, out)
 		}
+	}
+}
+
+func TestHandleHelp_NilRegistry(t *testing.T) {
+	// Nil AppState should fall back gracefully.
+	out, err := handleHelp(nil, "")
+	if err != nil {
+		t.Fatalf("handleHelp(nil) err: %v", err)
+	}
+	if out != "no commands registered" {
+		t.Errorf("handleHelp(nil) = %q, want %q", out, "no commands registered")
+	}
+
+	// AppState with nil Registry should also fall back.
+	out, err = handleHelp(&AppState{}, "")
+	if err != nil {
+		t.Fatalf("handleHelp(empty) err: %v", err)
+	}
+	if out != "no commands registered" {
+		t.Errorf("handleHelp(empty) = %q, want %q", out, "no commands registered")
+	}
+}
+
+func TestHandleHelp_ReflectsInjectedCommands(t *testing.T) {
+	// handleHelp should read from the caller's Registry, so custom
+	// commands registered on it must appear in the output. This is the
+	// regression test for the original bug where handleHelp rebuilt a
+	// fresh registry via RegisterAll and ignored test-injected commands.
+	reg := NewRegistry()
+	RegisterAll(reg)
+	reg.Register(Command{
+		Name:        "injected",
+		Description: "a test-injected command",
+	})
+	app := &AppState{Registry: reg}
+
+	out, err := handleHelp(app, "")
+	if err != nil {
+		t.Fatalf("handleHelp err: %v", err)
+	}
+	if !strings.Contains(out, "/injected") {
+		t.Errorf("handleHelp output missing injected command:\n%s", out)
+	}
+	if !strings.Contains(out, "a test-injected command") {
+		t.Errorf("handleHelp output missing injected command description:\n%s", out)
 	}
 }
