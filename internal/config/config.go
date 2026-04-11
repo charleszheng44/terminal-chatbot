@@ -12,10 +12,13 @@ import (
 
 // Defaults holds default parameters for chat requests.
 type Defaults struct {
-	Temperature  float64 `yaml:"temperature"`
-	MaxTokens    int     `yaml:"max_tokens"`
-	Streaming    bool    `yaml:"streaming"`
-	SystemPrompt string  `yaml:"system_prompt"`
+	Temperature float64 `yaml:"temperature"`
+	MaxTokens   int     `yaml:"max_tokens"`
+	// Streaming is a pointer so we can distinguish an unset field (nil,
+	// apply default) from an explicit "streaming: false" in YAML. See
+	// applyDefaults.
+	Streaming    *bool  `yaml:"streaming"`
+	SystemPrompt string `yaml:"system_prompt"`
 }
 
 // Config is the top-level configuration for tchat.
@@ -65,10 +68,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.Defaults.MaxTokens == 0 {
 		cfg.Defaults.MaxTokens = 4096
 	}
-	// Streaming defaults to true. Since bool zero-value is false, users
-	// must explicitly set "streaming: false" to disable it.
-	if !cfg.Defaults.Streaming {
-		cfg.Defaults.Streaming = true
+	// Streaming defaults to true when unset. Using a *bool lets us honor
+	// an explicit "streaming: false" in YAML, which a plain bool could
+	// not distinguish from the zero value.
+	if cfg.Defaults.Streaming == nil {
+		t := true
+		cfg.Defaults.Streaming = &t
 	}
 	if cfg.Providers == nil {
 		cfg.Providers = make(map[string]provider.ProviderConfig)

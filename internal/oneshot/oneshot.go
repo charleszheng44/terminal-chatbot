@@ -50,7 +50,12 @@ func Run(cfg *config.Config, prompt string) error {
 	isTTY := isTerminal()
 	ctx := context.Background()
 
-	if cfg.Defaults.Streaming {
+	// Streaming is a *bool so we can distinguish "unset" (defaulted to
+	// true by applyDefaults) from an explicit "streaming: false". Treat
+	// a nil value as true to be safe if the config was constructed
+	// without going through Load/applyDefaults.
+	streaming := cfg.Defaults.Streaming == nil || *cfg.Defaults.Streaming
+	if streaming {
 		var buf strings.Builder
 		err := p.StreamChat(ctx, messages, opts, func(token string) {
 			buf.WriteString(token)
