@@ -11,10 +11,14 @@ import (
 )
 
 // Defaults holds default parameters for chat requests.
+//
+// Streaming is a *bool so we can distinguish "unset" (nil, defaults to true)
+// from an explicit "streaming: false" in the YAML. A plain bool can't tell
+// those apart because both decode to false.
 type Defaults struct {
 	Temperature  float64 `yaml:"temperature"`
 	MaxTokens    int     `yaml:"max_tokens"`
-	Streaming    bool    `yaml:"streaming"`
+	Streaming    *bool   `yaml:"streaming"`
 	SystemPrompt string  `yaml:"system_prompt"`
 }
 
@@ -65,10 +69,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.Defaults.MaxTokens == 0 {
 		cfg.Defaults.MaxTokens = 4096
 	}
-	// Streaming defaults to true. Since bool zero-value is false, users
-	// must explicitly set "streaming: false" to disable it.
-	if !cfg.Defaults.Streaming {
-		cfg.Defaults.Streaming = true
+	// Streaming defaults to true when unset. A nil pointer means the user
+	// didn't mention it in YAML; a non-nil pointer is their explicit choice
+	// (including "streaming: false") and must be honored.
+	if cfg.Defaults.Streaming == nil {
+		t := true
+		cfg.Defaults.Streaming = &t
 	}
 	if cfg.Providers == nil {
 		cfg.Providers = make(map[string]provider.ProviderConfig)

@@ -50,7 +50,10 @@ func Run(cfg *config.Config, prompt string) error {
 	isTTY := isTerminal()
 	ctx := context.Background()
 
-	if cfg.Defaults.Streaming {
+	// applyDefaults guarantees Streaming is non-nil, but guard anyway to
+	// keep Run safe for callers who build a Config directly.
+	streaming := cfg.Defaults.Streaming == nil || *cfg.Defaults.Streaming
+	if streaming {
 		var buf strings.Builder
 		err := p.StreamChat(ctx, messages, opts, func(token string) {
 			buf.WriteString(token)

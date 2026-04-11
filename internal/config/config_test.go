@@ -80,7 +80,10 @@ func TestLoadFromBytes_AppliesDefaults(t *testing.T) {
 	if cfg.Defaults.MaxTokens != 4096 {
 		t.Errorf("default MaxTokens = %d", cfg.Defaults.MaxTokens)
 	}
-	if !cfg.Defaults.Streaming {
+	if cfg.Defaults.Streaming == nil {
+		t.Fatalf("default Streaming = nil, want non-nil pointer to true")
+	}
+	if !*cfg.Defaults.Streaming {
 		t.Errorf("default Streaming = false, want true")
 	}
 	if cfg.Providers == nil {
@@ -88,6 +91,47 @@ func TestLoadFromBytes_AppliesDefaults(t *testing.T) {
 	}
 	if cfg.Aliases == nil {
 		t.Errorf("Aliases map nil")
+	}
+}
+
+// TestLoadFromBytes_StreamingExplicit covers all three states for the
+// Defaults.Streaming field: unset (default true), explicit true, and
+// explicit false. The explicit-false case is the regression from #10.
+func TestLoadFromBytes_StreamingExplicit(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want bool
+	}{
+		{
+			name: "unset defaults to true",
+			yaml: `defaults: {}`,
+			want: true,
+		},
+		{
+			name: "explicit true is honored",
+			yaml: "defaults:\n  streaming: true\n",
+			want: true,
+		},
+		{
+			name: "explicit false is honored",
+			yaml: "defaults:\n  streaming: false\n",
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := loadFromBytes(t, []byte(tc.yaml))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.Defaults.Streaming == nil {
+				t.Fatalf("Streaming = nil, want non-nil pointer")
+			}
+			if got := *cfg.Defaults.Streaming; got != tc.want {
+				t.Errorf("Streaming = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
