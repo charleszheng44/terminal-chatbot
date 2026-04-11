@@ -62,7 +62,7 @@ func (p *openaiProvider) StreamChat(ctx context.Context, messages []Message, opt
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	for {
 		resp, err := stream.Recv()
