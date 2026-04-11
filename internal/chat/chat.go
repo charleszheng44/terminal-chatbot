@@ -193,32 +193,37 @@ func (s *Session) History() []provider.Message {
 	return out
 }
 
-// Retry removes the last assistant+user exchange and resends the last user
-// message. Returns an error if there is no user message to retry.
+// Retry resends the most recent user message. It handles the normal
+// successful-turn case and the post-failure case through a single code path:
+//
+//   - If the last message is an assistant reply, the trailing assistant +
+//     user pair is removed and that user content is Sent again.
+//   - If the last message is a user message (e.g. a prior Send failed but
+//     history still ends on a user turn, or a partial conversation was
+//     loaded), that trailing user message is removed and its content is
+//     Sent again.
+//
+// Either way, Send re-appends the user message and drives a fresh provider
+// call. Returns an error if there is no user message anywhere in history.
 func (s *Session) Retry(ctx context.Context, onToken func(string)) (string, error) {
 	s.mu.Lock()
 
-	// Find and remove the last assistant message and the user message before it.
-	// Walk backwards: expect assistant then user.
-	if len(s.messages) < 2 {
-		s.mu.Unlock()
-		return "", errors.New("no conversation to retry")
+	// Find the most recent user message.
+	userIdx := -1
+	for i := len(s.messages) - 1; i >= 0; i-- {
+		if s.messages[i].Role == "user" {
+			userIdx = i
+			break
+		}
 	}
-
-	last := len(s.messages) - 1
-	if s.messages[last].Role != "assistant" {
+	if userIdx == -1 {
 		s.mu.Unlock()
-		return "", errors.New("last message is not an assistant response")
-	}
-
-	userIdx := last - 1
-	if s.messages[userIdx].Role != "user" {
-		s.mu.Unlock()
-		return "", errors.New("no user message before last assistant response")
+		return "", errors.New("no user message to retry")
 	}
 
 	userMsg := s.messages[userIdx].Content
-	// Remove both the user and assistant messages.
+	// Trim from userIdx onward so Send can re-append the user turn cleanly
+	// without duplicating it.
 	s.messages = s.messages[:userIdx]
 	s.mu.Unlock()
 

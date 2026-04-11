@@ -282,14 +282,92 @@ func TestSession_Retry_EmptyHistoryErrors(t *testing.T) {
 	}
 }
 
-func TestSession_Retry_NoAssistantErrors(t *testing.T) {
+func TestSession_Retry_NoUserMessageErrors(t *testing.T) {
 	sess := newTestSession(&testProvider{})
-	// Two user messages, no assistant — e.g. a failed Send rolling back
-	// shouldn't happen with this sequence, but we still defend.
-	sess.AddMessage(provider.Message{Role: "user", Content: "a"})
-	sess.AddMessage(provider.Message{Role: "user", Content: "b"})
+	// History with only a system prompt has no user message to retry.
+	sess.SetSystemPrompt("you are a cat")
 	if _, err := sess.Retry(context.Background(), nil); err == nil {
-		t.Fatal("expected error when last message is not assistant")
+		t.Fatal("expected error when there is no user message")
+	}
+}
+
+// TestSession_Retry_AfterStreamingFailure covers issue #11: when Send's
+// streaming call fails, it rolls back the user message, leaving history
+// ending on an assistant turn (or empty). Retry must still be able to
+// re-send the original prompt by remembering the last user input.
+func TestSession_Retry_AfterStreamingFailure(t *testing.T) {
+	p := &testProvider{tokens: []string{"ok-first"}}
+	sess := newTestSession(p)
+
+	// Seed a successful prior turn so history ends on an assistant reply.
+	if _, err := sess.Send(context.Background(), "hello", nil); err != nil {
+		t.Fatalf("initial Send err: %v", err)
+	}
+
+	// Simulate a streaming failure for the next Send. The user message
+	// will be rolled back, leaving history at [user:hello, assistant:ok-first].
+	p.streamErr = errors.New("network blip")
+	if _, err := sess.Send(context.Background(), "followup", nil); err == nil {
+		t.Fatal("expected streaming error")
+	}
+	hist := sess.History()
+	if len(hist) != 2 {
+		t.Fatalf("history after failed Send len = %d, want 2", len(hist))
+	}
+	if hist[len(hist)-1].Role != "assistant" {
+		t.Fatalf("last message after rollback = %+v", hist[len(hist)-1])
+	}
+
+	// Recover: clear the error, make Retry succeed. Retry should re-send
+	// the most recent user content, which is "hello" (the only user turn
+	// left in history).
+	p.streamErr = nil
+	p.tokens = []string{"ok-second"}
+	out, err := sess.Retry(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Retry after failure err: %v", err)
+	}
+	if out != "ok-second" {
+		t.Errorf("Retry returned %q, want 'ok-second'", out)
+	}
+
+	hist = sess.History()
+	if len(hist) != 2 {
+		t.Fatalf("history after Retry len = %d, want 2", len(hist))
+	}
+	if hist[0].Role != "user" || hist[0].Content != "hello" {
+		t.Errorf("hist[0] = %+v", hist[0])
+	}
+	if hist[1].Role != "assistant" || hist[1].Content != "ok-second" {
+		t.Errorf("hist[1] = %+v", hist[1])
+	}
+}
+
+// TestSession_Retry_LastIsUser covers the case where history ends on a
+// user message (e.g. a partially-loaded conversation). Retry should
+// re-send that user message without duplicating it.
+func TestSession_Retry_LastIsUser(t *testing.T) {
+	p := &testProvider{tokens: []string{"reply"}}
+	sess := newTestSession(p)
+	sess.AddMessage(provider.Message{Role: "user", Content: "pending"})
+
+	out, err := sess.Retry(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Retry err: %v", err)
+	}
+	if out != "reply" {
+		t.Errorf("Retry returned %q", out)
+	}
+
+	hist := sess.History()
+	if len(hist) != 2 {
+		t.Fatalf("history len = %d", len(hist))
+	}
+	if hist[0].Role != "user" || hist[0].Content != "pending" {
+		t.Errorf("hist[0] = %+v", hist[0])
+	}
+	if hist[1].Role != "assistant" || hist[1].Content != "reply" {
+		t.Errorf("hist[1] = %+v", hist[1])
 	}
 }
 
