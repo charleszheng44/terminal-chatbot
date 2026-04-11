@@ -37,24 +37,32 @@ func (a *configAdapter) ConfigPath() string {
 
 // Model is the main Bubble Tea model for the TUI.
 type Model struct {
-	cfg       *config.Config
-	session   *chat.Session
-	registry  *command.Registry
-	appState  *command.AppState
-	input     InputModel
-	viewport  viewport.Model
-	spinner   spinner.Model
-	modelName string
-	streaming bool
-	streamBuf strings.Builder
-	messages  string
-	width     int
-	height    int
-	err       error
-	quitting  bool
-	program   *tea.Program
-	cancel    context.CancelFunc
-	ticking   bool
+	cfg        *config.Config
+	session    *chat.Session
+	registry   *command.Registry
+	appState   *command.AppState
+	input      InputModel
+	viewport   viewport.Model
+	spinner    spinner.Model
+	modelName  string
+	streaming  bool
+	streamBuf  strings.Builder
+	messages   string
+	width      int
+	height     int
+	err        error
+	quitting   bool
+	program    *tea.Program
+	cancel     context.CancelFunc
+	ticking    bool
+	pickerMode bool
+	picker     *ModelPicker
+	// notification is a transient UI message (e.g. /help output,
+	// "Switched to X", "Copied to clipboard.") that lives outside of
+	// session history. It is rendered below the history on every
+	// updateViewportContent call and cleared when the user starts a new
+	// chat turn.
+	notification string
 }
 
 // SetProgram stores the tea.Program reference on the model so that streaming
@@ -154,6 +162,16 @@ func (m *Model) Init() tea.Cmd {
 // Update handles messages for the model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// While the model picker is open, route keys to it exclusively and
+	// drop every other message. The picker is modal — nothing else should
+	// update while it's up.
+	if m.pickerMode {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			return m.handlePickerKey(km)
+		}
+		return m, nil
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -259,9 +277,14 @@ func (m *Model) handleSubmit(text string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Special handling for /model with args — switch models.
-		if cmdName == "model" && args != "" {
-			return m.handleModelSwitch(args)
+		// Special handling for /model.
+		//   /model <name>  → direct switch (unchanged)
+		//   /model         → interactive picker (arrow keys to select)
+		if cmdName == "model" {
+			if args != "" {
+				return m.handleModelSwitch(args)
+			}
+			return m.openModelPicker()
 		}
 
 		// Special handling for /config — open editor.
@@ -325,8 +348,47 @@ func (m *Model) handleSubmit(text string) (tea.Model, tea.Cmd) {
 
 	// Regular chat message — start streaming.
 	m.err = nil
+	m.notification = "" // clear any stale /help or "Switched to X" banner
 	m.streaming = true
 	return m, tea.Batch(m.sendMessage(text), m.spinner.Tick)
+}
+
+// openModelPicker enters modal picker mode for /model with no args.
+// Falls back to a text message when there are no models to pick from.
+func (m *Model) openModelPicker() (tea.Model, tea.Cmd) {
+	if len(m.appState.AvailableModels) == 0 {
+		m.addSystemMessage(fmt.Sprintf("Current model: %s\nNo other models configured.", m.modelName))
+		m.updateViewportContent(false)
+		return m, nil
+	}
+	m.picker = NewModelPicker(m.appState.AvailableModels, m.modelName)
+	m.pickerMode = true
+	return m, nil
+}
+
+// handlePickerKey processes a key press while the model picker is open.
+func (m *Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up":
+		m.picker.MoveUp()
+		return m, nil
+	case "down":
+		m.picker.MoveDown()
+		return m, nil
+	case "enter":
+		selected := m.picker.Selected()
+		m.pickerMode = false
+		m.picker = nil
+		if selected == "" || selected == m.modelName {
+			return m, nil
+		}
+		return m.handleModelSwitch(selected)
+	case "esc", "ctrl+c":
+		m.pickerMode = false
+		m.picker = nil
+		return m, nil
+	}
+	return m, nil
 }
 
 // handleModelSwitch switches to a new model.
@@ -452,14 +514,17 @@ func (m *Model) renderTick() tea.Cmd {
 	})
 }
 
-// addSystemMessage adds a system-style message to the rendered output.
+// addSystemMessage queues a transient UI notification to be rendered
+// below the chat history on the next updateViewportContent call. The
+// notification persists across intermediate re-renders (resize,
+// streaming ticks, picker toggle) and is cleared when the user starts
+// a new chat turn in handleSubmit.
+//
+// Calling this again replaces the prior notification rather than
+// appending, which is what we want for the current call sites
+// ("Switched to X", "Copied to clipboard.", /help output, etc.).
 func (m *Model) addSystemMessage(text string) {
-	rendered := systemMsgStyle.Render(text)
-	if m.messages != "" {
-		m.messages += "\n\n" + rendered
-	} else {
-		m.messages = rendered
-	}
+	m.notification = text
 }
 
 // updateViewportContent re-renders the chat content and updates the viewport.
@@ -486,6 +551,17 @@ func (m *Model) updateViewportContent(withStream bool) {
 			m.messages += "\n\n" + partial
 		} else {
 			m.messages = partial
+		}
+	}
+
+	// Append any pending UI notification last so it renders below the
+	// history, errors, and streaming partial.
+	if m.notification != "" {
+		note := systemMsgStyle.Render(m.notification)
+		if m.messages != "" {
+			m.messages += "\n\n" + note
+		} else {
+			m.messages = note
 		}
 	}
 
@@ -532,11 +608,18 @@ func (m *Model) View() string {
 		Width(m.width).
 		Render(statusText)
 
+	// When the picker is open, render it in place of the viewport. The
+	// input and status bar stay visible but inert.
+	mainContent := m.viewport.View()
+	if m.pickerMode && m.picker != nil {
+		mainContent = m.picker.View(m.width, m.viewport.Height)
+	}
+
 	// Build the full view.
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		statusBar,
-		m.viewport.View(),
+		mainContent,
 		m.input.View(),
 	)
 }
