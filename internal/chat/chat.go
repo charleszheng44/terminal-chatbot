@@ -16,6 +16,10 @@ type Session struct {
 	opts     provider.ChatOptions
 	messages []provider.Message
 	stream   bool
+	// lastUserInput is the most recent user input passed to Send, preserved
+	// even when Send's rollback removes the corresponding history entry on
+	// error so that Retry can resubmit it.
+	lastUserInput string
 }
 
 // NewSession creates a new chat session with the given provider and options.
@@ -32,6 +36,7 @@ func NewSession(p provider.Provider, opts provider.ChatOptions) *Session {
 // assistant reply to history, and returns the full response.
 func (s *Session) Send(ctx context.Context, input string, onToken func(string)) (string, error) {
 	s.mu.Lock()
+	s.lastUserInput = input
 	s.messages = append(s.messages, provider.Message{Role: "user", Content: input})
 	msgs := make([]provider.Message, len(s.messages))
 	copy(msgs, s.messages)
@@ -71,6 +76,7 @@ func (s *Session) Send(ctx context.Context, input string, onToken func(string)) 
 // SendNoStream sends a message without streaming.
 func (s *Session) SendNoStream(ctx context.Context, input string) (string, error) {
 	s.mu.Lock()
+	s.lastUserInput = input
 	s.messages = append(s.messages, provider.Message{Role: "user", Content: input})
 	msgs := make([]provider.Message, len(s.messages))
 	copy(msgs, s.messages)
@@ -193,35 +199,64 @@ func (s *Session) History() []provider.Message {
 	return out
 }
 
-// Retry removes the last assistant+user exchange and resends the last user
-// message. Returns an error if there is no user message to retry.
+// Retry resends the most recent user input. It handles both the normal case
+// (a successful user+assistant exchange at the tail of history) and the
+// post-failure case (the previous Send failed and rolled its user entry off
+// the history tail). One code path handles both:
+//
+//  1. If history ends with an assistant reply preceded by a user message that
+//     matches lastUserInput, that pair is the result of the most recent
+//     successful Send: drop both so Send re-adds the user turn cleanly.
+//  2. If history ends with a user message matching lastUserInput (e.g. a
+//     partial history that was seeded externally), drop it.
+//  3. Otherwise the last Send failed and already rolled back its own user
+//     entry; leave history alone.
+//
+// In all three cases the retry is driven by lastUserInput, which is set on
+// every Send call and preserved across Send's rollback. If no user message
+// has ever been sent, Retry returns an error.
 func (s *Session) Retry(ctx context.Context, onToken func(string)) (string, error) {
 	s.mu.Lock()
 
-	// Find and remove the last assistant message and the user message before it.
-	// Walk backwards: expect assistant then user.
-	if len(s.messages) < 2 {
+	if s.lastUserInput == "" {
+		// Nothing was ever sent; fall back to the legacy check so a
+		// caller-seeded history with a trailing user message is still
+		// retryable.
+		if n := len(s.messages); n > 0 && s.messages[n-1].Role == "user" {
+			userMsg := s.messages[n-1].Content
+			s.messages = s.messages[:n-1]
+			s.mu.Unlock()
+			return s.Send(ctx, userMsg, onToken)
+		}
 		s.mu.Unlock()
-		return "", errors.New("no conversation to retry")
+		return "", errors.New("no user message to retry")
 	}
 
-	last := len(s.messages) - 1
-	if s.messages[last].Role != "assistant" {
+	userMsg := s.lastUserInput
+
+	// Normal successful-turn case: drop the assistant reply and the matching
+	// user message it followed.
+	if n := len(s.messages); n >= 2 &&
+		s.messages[n-1].Role == "assistant" &&
+		s.messages[n-2].Role == "user" &&
+		s.messages[n-2].Content == userMsg {
+		s.messages = s.messages[:n-2]
 		s.mu.Unlock()
-		return "", errors.New("last message is not an assistant response")
+		return s.Send(ctx, userMsg, onToken)
 	}
 
-	userIdx := last - 1
-	if s.messages[userIdx].Role != "user" {
+	// Partial/seeded history case: tail user message matches lastUserInput.
+	if n := len(s.messages); n >= 1 &&
+		s.messages[n-1].Role == "user" &&
+		s.messages[n-1].Content == userMsg {
+		s.messages = s.messages[:n-1]
 		s.mu.Unlock()
-		return "", errors.New("no user message before last assistant response")
+		return s.Send(ctx, userMsg, onToken)
 	}
 
-	userMsg := s.messages[userIdx].Content
-	// Remove both the user and assistant messages.
-	s.messages = s.messages[:userIdx]
+	// Post-failure case: the last Send failed and already rolled back its
+	// user entry. Just resend — Send will append lastUserInput fresh.
 	s.mu.Unlock()
-
 	return s.Send(ctx, userMsg, onToken)
 }
 
